@@ -12,7 +12,9 @@ function assertTrue($condition, $message) {
 
 assertTrue(strpos($admin, "'limit'=>-1") === false && strpos($admin, "'limit' => -1") === false, 'admin must not load the entire WooCommerce product catalog');
 assertTrue(strpos($admin, 'wc-product-search') !== false, 'admin must use WooCommerce AJAX product search');
+assertTrue(strpos($admin, 'woocommerce_json_search_products_and_variations') !== false, 'admin product lookup must reuse WooCommerce optimized search endpoint');
+assertTrue(strpos($admin, "wp_ajax_wnm_") === false, 'bundle editing and email actions must not add unnecessary custom AJAX endpoints');
 assertTrue(strpos($monitor, 'acquireReconcileLock') !== false, 'reconciliation must guard against overlapping runs');
-assertTrue(strpos($main, 'Version: 0.1.1') !== false, 'plugin version must be bumped to 0.1.1');
+assertTrue(strpos($main, 'Version: 0.2.0') !== false, 'plugin version must be 0.2.0');
 
 echo "Performance hardening tests passed\n";
