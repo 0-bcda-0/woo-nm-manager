@@ -5,10 +5,20 @@ class WNM_Repository {
     private const BUNDLES = 'wnm_bundles';
     private const THRESHOLDS = 'wnm_thresholds';
     private const ALERT_STATES = 'wnm_alert_states';
+    private const NOTIFICATION_EMAIL = 'wnm_notification_email';
 
     public function getBundles(): array { return (array) get_option(self::BUNDLES, []); }
     public function getThresholds(): array { return (array) get_option(self::THRESHOLDS, []); }
     public function getAlertStates(): array { return (array) get_option(self::ALERT_STATES, []); }
+
+    public function getNotificationEmail(string $fallback): string {
+        $email = (string) get_option(self::NOTIFICATION_EMAIL, '');
+        return $email !== '' ? $email : $fallback;
+    }
+
+    public function saveNotificationEmail(string $email): void {
+        update_option(self::NOTIFICATION_EMAIL, $email, false);
+    }
 
     public function saveBundle(int $bundleProductId, array $components): void {
         $bundles = $this->getBundles();

@@ -89,6 +89,7 @@ class WNM_Stock_Monitor {
             admin_url('admin.php?page=woo-nm-manager'),
         ]);
 
-        wp_mail(get_option('admin_email'), $subject, $body);
+        $recipient = $this->repo->getNotificationEmail((string)get_option('admin_email'));
+        wp_mail($recipient, $subject, $body);
     }
 }

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Woo NM Manager
  * Description: Read-only WooCommerce bundle availability dashboard and component low-stock alerts.
- * Version: 0.1.1
+ * Version: 0.2.0
  * Author: Jan Jurjec
  * Requires Plugins: woocommerce
  * Text Domain: woo-nm-manager
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) { exit; }
 
-define('WNM_VERSION', '0.1.1');
+define('WNM_VERSION', '0.2.0');
 define('WNM_FILE', __FILE__);
 
 require_once __DIR__.'/includes/class-wnm-bundle-calculator.php';
