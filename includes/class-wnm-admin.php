@@ -35,15 +35,21 @@ class WNM_Admin {
         $this->handlePost();
         $bundles = $this->repo->getBundles();
         $thresholds = $this->repo->getThresholds();
+        $editBundleId = isset($_GET['edit_bundle']) ? absint($_GET['edit_bundle']) : 0;
+        $editBundle = $editBundleId && isset($bundles[$editBundleId]) ? $bundles[$editBundleId] : null;
 
-        echo '<div class="wrap"><h1>Woo NM Manager</h1><h2>Bundles / Kits</h2>';
+        echo '<div class="wrap"><h1>Woo NM Manager</h1>';
+        $this->renderNotice();
+        $this->renderEmailSettings();
 
+        echo '<h2>Bundles / Kits</h2>';
         if (!$bundles) {
             echo '<p>No bundles configured yet.</p>';
         } else {
-            echo '<table class="widefat striped"><thead><tr><th>Bundle</th><th>Possible kits</th><th>Components</th><th></th></tr></thead><tbody>';
+            echo '<table class="widefat striped"><thead><tr><th>Bundle</th><th>Possible kits</th><th>Components</th><th>Actions</th></tr></thead><tbody>';
             foreach ($bundles as $bundle) {
-                $bp = $this->product((int)$bundle['bundle_product_id']);
+                $bundleId = (int)$bundle['bundle_product_id'];
+                $bp = $this->product($bundleId);
                 $calc = [];
                 $parts = [];
 
@@ -57,22 +63,22 @@ class WNM_Admin {
                 }
 
                 $possible = $this->calculator->possibleKits($calc);
-                echo '<tr><td><strong>'.esc_html($bp ? $bp->get_name() : 'Missing product').'</strong></td><td>'.esc_html($possible === null ? 'Unavailable' : (string)$possible).'</td><td>'.esc_html(implode(' · ', $parts)).'</td><td><form method="post">';
+                $editUrl = add_query_arg(['page' => 'woo-nm-manager', 'edit_bundle' => $bundleId], admin_url('admin.php'));
+
+                echo '<tr><td><strong>'.esc_html($bp ? $bp->get_name() : 'Missing product').'</strong></td>';
+                echo '<td>'.esc_html($possible === null ? 'Unavailable' : (string)$possible).'</td>';
+                echo '<td>'.esc_html(implode(' · ', $parts)).'</td><td>';
+                echo '<a class="button" href="'.esc_url($editUrl).'">Edit</a> ';
+                echo '<form method="post" style="display:inline">';
                 wp_nonce_field('wnm_delete_bundle');
-                echo '<input type="hidden" name="wnm_action" value="delete_bundle"><input type="hidden" name="bundle_product_id" value="'.esc_attr($bundle['bundle_product_id']).'"><button class="button">Remove</button></form></td></tr>';
+                echo '<input type="hidden" name="wnm_action" value="delete_bundle">';
+                echo '<input type="hidden" name="bundle_product_id" value="'.esc_attr($bundleId).'">';
+                echo '<button class="button" onclick="return confirm(\'Remove this bundle mapping from Woo NM Manager?\')">Remove bundle</button></form></td></tr>';
             }
             echo '</tbody></table>';
         }
 
-        echo '<h2>Add / Update bundle</h2><form method="post">';
-        wp_nonce_field('wnm_save_bundle');
-        echo '<input type="hidden" name="wnm_action" value="save_bundle"><p><label>Bundle product ';
-        $this->productSearchSelect('bundle_product_id', 'Search for a WooCommerce product…', true);
-        echo '</label></p><table class="widefat" id="wnm-components"><thead><tr><th>Component</th><th>Qty / kit</th><th></th></tr></thead><tbody>';
-        $this->componentRow();
-        echo '</tbody></table><p><button type="button" class="button" id="wnm-add">Add component</button></p>';
-        submit_button('Save bundle');
-        echo '</form>';
+        $this->renderBundleEditor($editBundle);
 
         echo '<h2>Tracked products / Alerts</h2>';
         $ids = $this->repo->trackedProductIds();
@@ -111,14 +117,72 @@ class WNM_Admin {
         ob_start();
         $this->componentRow();
         $template = ob_get_clean();
-        echo '<script>(()=>{const b=document.querySelector("#wnm-components tbody"),t='.wp_json_encode($template).';document.getElementById("wnm-add")?.addEventListener("click",()=>{b.insertAdjacentHTML("beforeend",t);if(window.jQuery){jQuery(document.body).trigger("wc-enhanced-select-init");}});b?.addEventListener("click",e=>{if(e.target.classList.contains("wnm-remove"))e.target.closest("tr").remove()})})();</script>';
+        echo '<script>(()=>{const b=document.querySelector("#wnm-components tbody"),t='.wp_json_encode($template).';document.getElementById("wnm-add")?.addEventListener("click",()=>{b.insertAdjacentHTML("beforeend",t);if(window.jQuery){jQuery(document.body).trigger("wc-enhanced-select-init");}});b?.addEventListener("click",e=>{if(e.target.classList.contains("wnm-remove")){e.target.closest("tr").remove();}})})();</script>';
+    }
+
+    private function renderEmailSettings(): void {
+        $fallback = (string)get_option('admin_email');
+        $email = $this->repo->getNotificationEmail($fallback);
+
+        echo '<h2>Email notifications</h2><form method="post" style="max-width:700px">';
+        wp_nonce_field('wnm_email_settings');
+        echo '<p><label for="wnm-notification-email"><strong>Recipient email</strong></label><br>';
+        echo '<input id="wnm-notification-email" type="email" class="regular-text" name="notification_email" value="'.esc_attr($email).'" required></p>';
+        echo '<p><button class="button button-primary" name="wnm_action" value="save_email">Save email</button> ';
+        echo '<button class="button" name="wnm_action" value="send_test_email">Send test email</button></p>';
+        echo '<p class="description">Low-stock alerts and test messages are sent only to this address. If no plugin-specific address is stored, WordPress admin email is used.</p>';
+        echo '</form>';
+    }
+
+    private function renderBundleEditor(?array $bundle): void {
+        $editing = is_array($bundle);
+        $bundleId = $editing ? (int)$bundle['bundle_product_id'] : 0;
+
+        echo '<h2>'.($editing ? 'Edit bundle' : 'Add bundle').'</h2><form method="post">';
+        wp_nonce_field('wnm_save_bundle');
+        echo '<input type="hidden" name="wnm_action" value="save_bundle"><p><label>Bundle product ';
+        $this->productSearchSelect('bundle_product_id', 'Search for a WooCommerce product…', true, $bundleId);
+        echo '</label></p><table class="widefat" id="wnm-components"><thead><tr><th>Component</th><th>Qty / kit</th><th></th></tr></thead><tbody>';
+
+        if ($editing && !empty($bundle['components'])) {
+            foreach ($bundle['components'] as $component) {
+                $this->componentRow((int)$component['product_id'], (int)$component['qty']);
+            }
+        } else {
+            $this->componentRow();
+        }
+
+        echo '</tbody></table><p><button type="button" class="button" id="wnm-add">Add component</button></p>';
+        submit_button($editing ? 'Save bundle changes' : 'Save bundle');
+        if ($editing) {
+            echo ' <a class="button" href="'.esc_url(admin_url('admin.php?page=woo-nm-manager')).'">Cancel edit</a>';
+        }
+        echo '</form>';
+    }
+
+    private function renderNotice(): void {
+        $notice = isset($_GET['wnm_notice']) ? sanitize_key(wp_unslash($_GET['wnm_notice'])) : '';
+        $messages = [
+            'bundle_saved' => ['success', 'Bundle mapping saved.'],
+            'bundle_removed' => ['success', 'Bundle mapping removed.'],
+            'bundle_invalid' => ['error', 'Bundle must contain at least one valid component.'],
+            'email_saved' => ['success', 'Notification email saved.'],
+            'email_invalid' => ['error', 'Please enter a valid email address.'],
+            'test_sent' => ['success', 'Test email sent successfully.'],
+            'test_failed' => ['error', 'WordPress could not send the test email. Check your mail/SMTP configuration.'],
+        ];
+        if (!isset($messages[$notice])) return;
+        [$type, $message] = $messages[$notice];
+        echo '<div class="notice notice-'.esc_attr($type).' is-dismissible"><p>'.esc_html($message).'</p></div>';
     }
 
     private function handlePost(): void {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_POST['wnm_action'])) return;
-        $a = sanitize_key(wp_unslash($_POST['wnm_action']));
+        if (!current_user_can('manage_woocommerce')) wp_die('Forbidden');
 
-        if ($a === 'save_bundle') {
+        $action = sanitize_key(wp_unslash($_POST['wnm_action']));
+
+        if ($action === 'save_bundle') {
             check_admin_referer('wnm_save_bundle');
             $bundle = absint($_POST['bundle_product_id'] ?? 0);
             $ids = array_map('absint', (array)($_POST['component_product_id'] ?? []));
@@ -133,30 +197,53 @@ class WNM_Admin {
                 $components[] = ['product_id' => $id, 'qty' => $q];
             }
 
-            if ($bundle && $this->product($bundle) && $components) {
-                $this->repo->saveBundle($bundle, $components);
+            if (!$bundle || !$this->product($bundle) || !$components) {
+                $this->redirectWithNotice('bundle_invalid');
             }
-            wp_safe_redirect(admin_url('admin.php?page=woo-nm-manager'));
-            exit;
+
+            $this->repo->saveBundle($bundle, $components);
+            $this->redirectWithNotice('bundle_saved');
         }
 
-        if ($a === 'delete_bundle') {
+        if ($action === 'delete_bundle') {
             check_admin_referer('wnm_delete_bundle');
             $this->repo->deleteBundle(absint($_POST['bundle_product_id'] ?? 0));
-            wp_safe_redirect(admin_url('admin.php?page=woo-nm-manager'));
-            exit;
+            $this->redirectWithNotice('bundle_removed');
         }
 
-        if ($a === 'save_thresholds') {
+        if ($action === 'save_thresholds') {
             check_admin_referer('wnm_save_thresholds');
-            $t = [];
-            foreach ((array)($_POST['threshold'] ?? []) as $id => $v) {
-                $t[absint($id)] = max(0, absint($v));
+            $thresholds = [];
+            foreach ((array)($_POST['threshold'] ?? []) as $id => $value) {
+                $thresholds[absint($id)] = max(0, absint($value));
             }
-            $this->repo->saveThresholds($t);
-            wp_safe_redirect(admin_url('admin.php?page=woo-nm-manager'));
-            exit;
+            $this->repo->saveThresholds($thresholds);
+            $this->redirectWithNotice('bundle_saved');
         }
+
+        if ($action === 'save_email' || $action === 'send_test_email') {
+            check_admin_referer('wnm_email_settings');
+            $email = sanitize_email(wp_unslash($_POST['notification_email'] ?? ''));
+            if (!$email || !is_email($email)) {
+                $this->redirectWithNotice('email_invalid');
+            }
+
+            if ($action === 'save_email') {
+                $this->repo->saveNotificationEmail($email);
+                $this->redirectWithNotice('email_saved');
+            }
+
+            $subject = '[Woo NM Manager] Test email';
+            $body = "Woo NM Manager email notifications are working.\n\nThis is a test message from your WordPress site.";
+            $sent = wp_mail($email, $subject, $body);
+            $this->redirectWithNotice($sent ? 'test_sent' : 'test_failed');
+        }
+    }
+
+    private function redirectWithNotice(string $notice): void {
+        $url = add_query_arg(['page' => 'woo-nm-manager', 'wnm_notice' => $notice], admin_url('admin.php'));
+        wp_safe_redirect($url);
+        exit;
     }
 
     private function product(int $id) {
@@ -167,13 +254,21 @@ class WNM_Admin {
         return $this->productCache[$id];
     }
 
-    private function productSearchSelect(string $name, string $placeholder, bool $required = false): void {
-        echo '<select class="wc-product-search" style="width:350px" name="'.esc_attr($name).'" data-placeholder="'.esc_attr($placeholder).'" data-action="woocommerce_json_search_products_and_variations" data-allow_clear="true"'.($required ? ' required' : '').'></select>';
+    private function productSearchSelect(string $name, string $placeholder, bool $required = false, int $selectedId = 0): void {
+        echo '<select class="wc-product-search" style="width:350px" name="'.esc_attr($name).'" data-placeholder="'.esc_attr($placeholder).'" data-action="woocommerce_json_search_products_and_variations" data-allow_clear="true"'.($required ? ' required' : '').'>';
+        if ($selectedId > 0) {
+            $product = $this->product($selectedId);
+            if ($product) {
+                $label = $product->get_name().($product->get_sku() ? ' ['.$product->get_sku().']' : '');
+                echo '<option value="'.esc_attr($selectedId).'" selected>'.esc_html($label).'</option>';
+            }
+        }
+        echo '</select>';
     }
 
-    private function componentRow(): void {
+    private function componentRow(int $selectedId = 0, int $qty = 1): void {
         echo '<tr><td>';
-        $this->productSearchSelect('component_product_id[]', 'Search for a component…', true);
-        echo '</td><td><input type="number" min="1" value="1" name="component_qty[]" required></td><td><button type="button" class="button wnm-remove">Remove</button></td></tr>';
+        $this->productSearchSelect('component_product_id[]', 'Search for a component…', true, $selectedId);
+        echo '</td><td><input type="number" min="1" value="'.esc_attr(max(1, $qty)).'" name="component_qty[]" required></td><td><button type="button" class="button wnm-remove">Remove</button></td></tr>';
     }
 }
