@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Woo NM Manager
- * Description: Read-only WooCommerce bundle availability dashboard and component low-stock alerts.
- * Version: 0.3.0
+ * Description: WooCommerce bundle availability dashboard, automatic bundle-stock synchronization, and component low-stock alerts.
+ * Version: 0.4.0
  * Author: Jan Jurjec
  * Requires Plugins: woocommerce
  * Text Domain: woo-nm-manager
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) { exit; }
 
-define('WNM_VERSION', '0.3.0');
+define('WNM_VERSION', '0.4.0');
 define('WNM_FILE', __FILE__);
 
 require_once __DIR__.'/includes/class-wnm-bundle-calculator.php';
@@ -36,15 +36,31 @@ add_action('plugins_loaded', function(){
 
     require_once __DIR__.'/includes/class-wnm-repository.php';
     require_once __DIR__.'/includes/class-wnm-stock-monitor.php';
+    require_once __DIR__.'/includes/class-wnm-bundle-stock-sync.php';
     require_once __DIR__.'/includes/class-wnm-admin.php';
 
     $repo = new WNM_Repository();
+    $calculator = new WNM_Bundle_Calculator();
     $monitor = new WNM_Stock_Monitor($repo, new WNM_Alert_State());
-    $admin = new WNM_Admin($repo, new WNM_Bundle_Calculator());
+    $bundleStockSync = new WNM_Bundle_Stock_Sync($repo, $calculator);
+    $admin = new WNM_Admin($repo, $calculator);
 
     add_action('admin_menu', [$admin, 'register']);
     add_action('admin_enqueue_scripts', [$admin, 'enqueue']);
+
     add_action('woocommerce_product_set_stock', [$monitor, 'checkWooProduct']);
     add_action('woocommerce_variation_set_stock', [$monitor, 'checkWooProduct']);
+
+    add_action('woocommerce_product_set_stock', [$bundleStockSync, 'handleComponentStockChange'], 20);
+    add_action('woocommerce_variation_set_stock', [$bundleStockSync, 'handleComponentStockChange'], 20);
+    add_action('wnm_bundle_saved', [$bundleStockSync, 'syncBundle']);
+
     add_action('wnm_reconcile_stock', [$monitor, 'reconcile']);
+    add_action('wnm_reconcile_stock', [$bundleStockSync, 'syncAll'], 20);
+
+    add_action('admin_init', function() use ($bundleStockSync) {
+        if ((string)get_option('wnm_bundle_stock_sync_version', '') === WNM_VERSION) return;
+        $bundleStockSync->syncAll();
+        update_option('wnm_bundle_stock_sync_version', WNM_VERSION, false);
+    });
 });
