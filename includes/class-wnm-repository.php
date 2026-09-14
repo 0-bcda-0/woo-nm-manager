@@ -37,7 +37,9 @@ class WNM_Repository {
         ];
         update_option(self::BUNDLES, $bundles, false);
         $this->cleanupOrphanedTrackingData();
-        do_action('wnm_bundle_saved', $bundleProductId);
+        if (function_exists('do_action')) {
+            do_action('wnm_bundle_saved', $bundleProductId);
+        }
     }
 
     public function deleteBundle(int $bundleProductId): void {
