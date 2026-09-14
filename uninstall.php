@@ -11,3 +11,4 @@ delete_option('wnm_alert_states');
 delete_option('wnm_notification_email');
 delete_option('wnm_remove_data_on_uninstall');
 delete_option('wnm_reconcile_lock');
+delete_option('wnm_bundle_stock_sync_version');
