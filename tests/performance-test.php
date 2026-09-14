@@ -1,10 +1,13 @@
 <?php
-$admin=file_get_contents(__DIR__.'/../includes/class-wnm-admin.php');$main=file_get_contents(__DIR__.'/../woo-nm-manager.php');$monitor=file_get_contents(__DIR__.'/../includes/class-wnm-stock-monitor.php');
+$admin=file_get_contents(__DIR__.'/../includes/class-wnm-admin.php');$main=file_get_contents(__DIR__.'/../woo-nm-manager.php');$monitor=file_get_contents(__DIR__.'/../includes/class-wnm-stock-monitor.php');$bundleSync=file_get_contents(__DIR__.'/../includes/class-wnm-bundle-stock-sync.php');
 function assertTrue($condition,$message){if(!$condition){fwrite(STDERR,"FAIL: $message\n");exit(1);}}
 assertTrue(strpos($admin,"'limit'=>-1")===false&&strpos($admin,"'limit' => -1")===false,'admin must not load the entire WooCommerce product catalog');
 assertTrue(strpos($admin,'wc-product-search')!==false,'admin must use WooCommerce AJAX product search');
 assertTrue(strpos($admin,'woocommerce_json_search_products_and_variations')!==false,'admin product lookup must reuse WooCommerce optimized search endpoint');
 assertTrue(strpos($admin,'wp_ajax_wnm_')===false,'bundle editing and email actions must not add unnecessary custom AJAX endpoints');
 assertTrue(strpos($monitor,'acquireReconcileLock')!==false,'reconciliation must guard against overlapping runs');
-assertTrue(strpos($main,'Version: 0.3.0')!==false,'plugin version must be 0.3.0');
+assertTrue(strpos($bundleSync,"!== $targetStock")!==false,'bundle stock sync must skip unchanged quantity writes');
+assertTrue(strpos($bundleSync,"!== $targetStatus")!==false,'bundle stock sync must skip unchanged status writes');
+assertTrue(strpos($bundleSync,'wc_update_product_stock(')!==false,'bundle stock sync must use WooCommerce optimized stock API');
+assertTrue(strpos($main,'Version: 0.4.0')!==false,'plugin version must be 0.4.0');
 echo "Performance hardening tests passed\n";
